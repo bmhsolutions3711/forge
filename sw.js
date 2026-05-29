@@ -1,5 +1,5 @@
 // Forge PWA shell — network-first SW. Backend API calls (cross-origin) bypass cache.
-const CACHE_NAME = "forge-shell-v1";
+const CACHE_NAME = "forge-shell-v2";
 const SHELL = [
   "./",
   "./index.html",
