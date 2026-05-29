@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#16171a">
+<link rel="manifest" href="./manifest.json">
+<link rel="apple-touch-icon" href="./static/forge-icon-192.png">
+<title>Forge</title>
+<style>
+  :root{
+    --bg:#16171a; --bg2:#1b1d21; --card:#1f2125; --card2:#24272c;
+    --border:#2c2f36; --line:#2c2f36;
+    --text:#e8e9ec; --muted:#8b9099; --dim:#6a6f78;
+    --glow:#ff7a18; --glow2:#ffb347; --glowdim:#7a4a22;
+    --crypto:#f7931a; --ai:#7c9cff; --business:#46c98b; --trucking:#e0a458; --general:#9aa0a8;
+    --high:#46c98b; --medium:#e0a458; --low:#8b9099;
+    --radius:14px;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%}
+  body{
+    background:var(--bg); color:var(--text);
+    font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    padding-bottom:env(safe-area-inset-bottom);
+    overflow-x:hidden;
+  }
+  button{font-family:inherit;cursor:pointer}
+  a{color:var(--glow2);text-decoration:none}
+
+  /* ── Setup overlay ── */
+  .overlay{position:fixed;inset:0;background:var(--bg);z-index:100;display:flex;
+    align-items:center;justify-content:center;padding:24px}
+  .setup-card{max-width:420px;width:100%;text-align:center}
+  .setup-card img{width:96px;height:96px;border-radius:22px;margin-bottom:18px;
+    box-shadow:0 0 40px rgba(255,122,24,.25)}
+  .setup-card h1{font-size:26px;margin:0 0 6px;letter-spacing:.5px}
+  .setup-lead{color:var(--muted);font-size:13.5px;margin:0 0 22px;line-height:1.6}
+  .setup-lead code{background:var(--card2);padding:1px 6px;border-radius:5px;font-size:12px;color:var(--glow2)}
+  label.field{display:block;text-align:left;margin-bottom:14px}
+  label.field span{display:block;font-size:12px;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.6px}
+  input,textarea,select{width:100%;background:var(--card);border:1px solid var(--border);
+    color:var(--text);padding:12px 14px;border-radius:10px;font-size:15px;outline:none}
+  input:focus,textarea:focus,select:focus{border-color:var(--glow)}
+  .btn{background:linear-gradient(135deg,var(--glow),var(--glow2));color:#1a1206;border:none;
+    padding:13px 22px;border-radius:11px;font-weight:700;font-size:15px;width:100%;
+    box-shadow:0 4px 18px rgba(255,122,24,.3)}
+  .btn:disabled{opacity:.5}
+  .btn-ghost{background:var(--card);border:1px solid var(--border);color:var(--text);
+    box-shadow:none;font-weight:600}
+  .err{color:#ff6b6b;font-size:13px;margin-top:12px}
+
+  /* ── App chrome ── */
+  header{position:sticky;top:0;z-index:20;background:rgba(22,23,26,.92);
+    backdrop-filter:blur(12px);border-bottom:1px solid var(--border);
+    padding:max(14px,env(safe-area-inset-top)) 16px 0}
+  .brand{display:flex;align-items:center;gap:11px;padding-bottom:12px}
+  .brand img{width:34px;height:34px;border-radius:9px}
+  .brand .t{font-size:19px;font-weight:800;letter-spacing:.5px}
+  .brand .s{font-size:11px;color:var(--muted);margin-top:1px;letter-spacing:.3px}
+  .brand .spacer{flex:1}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--dim)}
+  .dot.ok{background:var(--high);box-shadow:0 0 8px var(--high)}
+  .dot.bad{background:#ff6b6b}
+  .tabs{display:flex;gap:4px;overflow-x:auto;padding-bottom:0;scrollbar-width:none}
+  .tabs::-webkit-scrollbar{display:none}
+  .tab{background:none;border:none;color:var(--muted);padding:11px 14px 13px;font-size:14px;
+    font-weight:600;border-bottom:2.5px solid transparent;white-space:nowrap}
+  .tab.active{color:var(--glow2);border-bottom-color:var(--glow)}
+  main{padding:16px;max-width:760px;margin:0 auto}
+  .view{display:none}.view.active{display:block}
+
+  /* ── Cards ── */
+  .card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);
+    padding:15px;margin-bottom:12px}
+  .sig-top{display:flex;align-items:flex-start;gap:9px;margin-bottom:7px}
+  .sig-title{font-size:16px;font-weight:700;line-height:1.35;flex:1}
+  .sig-score{font-size:12px;font-weight:800;padding:3px 8px;border-radius:7px;
+    background:var(--card2);color:var(--glow2);white-space:nowrap}
+  .badges{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:9px}
+  .badge{font-size:10.5px;font-weight:700;padding:2.5px 8px;border-radius:20px;
+    text-transform:uppercase;letter-spacing:.4px}
+  .badge.dom{color:#10110f}
+  .badge.conf{border:1px solid currentColor;background:transparent}
+  .tag{font-size:11px;color:var(--muted);background:var(--card2);padding:2px 8px;border-radius:6px}
+  .sig-sum{color:var(--text);font-size:14px;margin:0 0 9px}
+  .sig-imp{color:var(--glow2);font-size:13.5px;margin:0 0 11px;padding-left:11px;
+    border-left:2px solid var(--glowdim);font-style:italic}
+  .cites{display:flex;flex-direction:column;gap:3px;margin-bottom:11px}
+  .cite{font-size:12.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .cite::before{content:"↗ ";color:var(--glow)}
+  .sig-actions{display:flex;gap:7px}
+  .act{flex:1;background:var(--card2);border:1px solid var(--border);color:var(--muted);
+    padding:8px;border-radius:9px;font-size:13px;font-weight:600}
+  .act.on{color:var(--glow2);border-color:var(--glowdim)}
+  .act.star.on{color:#ffd23f;border-color:#5a4a12}
+
+  .row{display:flex;gap:8px;align-items:center}
+  .seg{display:flex;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:3px;gap:2px}
+  .seg button{flex:1;background:none;border:none;color:var(--muted);padding:8px 10px;
+    border-radius:7px;font-size:13px;font-weight:600}
+  .seg button.active{background:var(--card2);color:var(--glow2)}
+  .seg button:disabled{opacity:.35}
+  .seg-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:5px}
+  .prov{font-size:10.5px;color:var(--dim);background:transparent;border:1px solid var(--border);
+    padding:2px 7px;border-radius:6px}
+  .filterbar{display:flex;gap:6px;overflow-x:auto;margin-bottom:13px;scrollbar-width:none;padding-bottom:2px}
+  .filterbar::-webkit-scrollbar{display:none}
+  .chip{background:var(--card);border:1px solid var(--border);color:var(--muted);
+    padding:7px 13px;border-radius:20px;font-size:13px;font-weight:600;white-space:nowrap}
+  .chip.active{background:var(--card2);color:var(--glow2);border-color:var(--glowdim)}
+
+  .empty{text-align:center;color:var(--dim);padding:48px 20px;font-size:14px}
+  .empty .big{font-size:38px;margin-bottom:12px;opacity:.6}
+  .muted{color:var(--muted)}
+  .small{font-size:12.5px}
+  h2.sec{font-size:13px;text-transform:uppercase;letter-spacing:.7px;color:var(--muted);
+    margin:4px 0 12px;font-weight:700}
+
+  /* topic card */
+  .topic-head{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+  .topic-emoji{font-size:24px}
+  .topic-name{font-weight:700;font-size:15.5px;flex:1}
+  .topic-lens{color:var(--muted);font-size:13px;margin:0 0 11px;line-height:1.5}
+  .topic-meta{display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--dim)}
+  .runbtn{background:linear-gradient(135deg,var(--glow),var(--glow2));color:#1a1206;border:none;
+    padding:8px 16px;border-radius:9px;font-weight:700;font-size:13px}
+
+  /* progress */
+  .prog{background:var(--card);border:1px solid var(--glowdim);border-radius:var(--radius);
+    padding:16px;margin-bottom:13px;display:none}
+  .prog.show{display:block}
+  .prog-head{display:flex;align-items:center;gap:10px;font-weight:700;margin-bottom:8px}
+  .spinner{width:16px;height:16px;border:2.5px solid var(--glowdim);border-top-color:var(--glow);
+    border-radius:50%;animation:spin .8s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .prog-detail{font-size:13px;color:var(--muted);font-family:ui-monospace,monospace;min-height:18px}
+
+  /* brief render */
+  .brief-md{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:18px}
+  .brief-md h1,.brief-md h2{color:var(--glow2);font-size:16px;margin:16px 0 8px;
+    border-bottom:1px solid var(--border);padding-bottom:5px}
+  .brief-md h1:first-child,.brief-md h2:first-child{margin-top:0}
+  .brief-md ul{padding-left:20px;margin:8px 0}
+  .brief-md li{margin-bottom:5px}
+  .brief-md p{margin:8px 0}
+  .brief-md strong{color:var(--text)}
+
+  .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--card2);
+    border:1px solid var(--border);color:var(--text);padding:11px 18px;border-radius:11px;
+    font-size:14px;z-index:200;opacity:0;transition:opacity .25s;pointer-events:none;
+    box-shadow:0 8px 30px rgba(0,0,0,.4)}
+  .toast.show{opacity:1}
+  .gear{background:none;border:none;color:var(--muted);font-size:18px;padding:4px}
+</style>
+</head>
+<body>
+
+<!-- ── Setup ── -->
+<div class="overlay" id="setupOverlay">
+  <div class="setup-card">
+    <img src="./static/forge-icon-512.png" alt="Forge">
+    <h1>FORGE</h1>
+    <p class="setup-lead">Your read-only research analyst. Connect to the Mac&nbsp;Pro running Forge.
+      Backend URL is your Tailscale host (e.g. <code>https://...ts.net:8490</code>), token is
+      <code>FORGE_TOKEN</code> (or <code>COMPANION_TOKEN</code>) from <code>~/.config/bmh/.env</code>.</p>
+    <label class="field"><span>Backend URL</span>
+      <input id="setupUrl" type="url" placeholder="https://...ts.net:8490" autocomplete="off"></label>
+    <label class="field"><span>Token</span>
+      <input id="setupToken" type="password" placeholder="FORGE_TOKEN" autocomplete="off"></label>
+    <button class="btn" id="setupBtn" onclick="setupConnect()">Connect</button>
+    <div class="err" id="setupError" hidden></div>
+  </div>
+</div>
+
+<!-- ── App ── -->
+<div id="app" hidden>
+  <header>
+    <div class="brand">
+      <img src="./static/forge-icon-192.png" alt="">
+      <div>
+        <div class="t">FORGE</div>
+        <div class="s" id="brandSub">read-only research → signals</div>
+      </div>
+      <div class="spacer"></div>
+      <span class="dot" id="health" title="backend"></span>
+      <button class="gear" onclick="logout()" title="Disconnect">⎋</button>
+    </div>
+    <div class="tabs">
+      <button class="tab active" data-view="feed" onclick="switchTab('feed')">Feed</button>
+      <button class="tab" data-view="research" onclick="switchTab('research')">Research</button>
+      <button class="tab" data-view="topics" onclick="switchTab('topics')">Topics</button>
+      <button class="tab" data-view="briefs" onclick="switchTab('briefs')">Briefs</button>
+    </div>
+  </header>
+
+  <main>
+    <!-- FEED -->
+    <section class="view active" id="view-feed">
+      <div class="filterbar" id="feedFilters"></div>
+      <div id="feedList"></div>
+    </section>
+
+    <!-- RESEARCH -->
+    <section class="view" id="view-research">
+      <h2 class="sec">Forge a signal — ask anything</h2>
+      <textarea id="qInput" rows="3" placeholder="e.g. Is XRP gaining real B2B payment traction in 2026? What new local models can run on 24GB?"></textarea>
+      <div style="display:flex;gap:10px;margin:11px 0 14px">
+        <div style="flex:1">
+          <div class="seg-label">Depth</div>
+          <div class="seg" id="depthSeg">
+            <button data-d="quick" onclick="setDepth('quick')">Quick</button>
+            <button data-d="standard" class="active" onclick="setDepth('standard')">Standard</button>
+            <button data-d="deep" onclick="setDepth('deep')">Deep</button>
+          </div>
+        </div>
+        <div style="flex:1">
+          <div class="seg-label">Brain</div>
+          <div class="seg" id="brainSeg">
+            <button data-b="claude" class="active" onclick="setBrain('claude')">☁️ Claude</button>
+            <button data-b="gemma" onclick="setBrain('gemma')">🔥 Local</button>
+          </div>
+        </div>
+      </div>
+      <button class="btn" id="forgeBtn" onclick="runResearch()">🔨 Forge Signals</button>
+      <div class="prog" id="prog">
+        <div class="prog-head"><span class="spinner"></span><span id="progStage">Working…</span></div>
+        <div class="prog-detail" id="progDetail"></div>
+      </div>
+      <div id="researchResult" style="margin-top:16px"></div>
+    </section>
+
+    <!-- TOPICS -->
+    <section class="view" id="view-topics">
+      <h2 class="sec">Watchlist</h2>
+      <div id="topicList"></div>
+      <details style="margin-top:8px">
+        <summary class="muted small" style="cursor:pointer;padding:8px 0">+ Add a topic</summary>
+        <div class="card" style="margin-top:8px">
+          <label class="field"><span>Name</span><input id="ntName" placeholder="e.g. AI agent frameworks"></label>
+          <label class="field"><span>Domain</span>
+            <select id="ntDomain">
+              <option value="crypto">crypto</option><option value="ai">ai</option>
+              <option value="business">business</option><option value="trucking">trucking</option>
+              <option value="general" selected>general</option>
+            </select></label>
+          <label class="field"><span>Search queries (one per line)</span>
+            <textarea id="ntQueries" rows="3" placeholder="best AI agent framework 2026&#10;LangGraph vs alternatives"></textarea></label>
+          <label class="field"><span>Lens — how Forge should read it</span>
+            <textarea id="ntLens" rows="2" placeholder="What matters to Bryan about this topic?"></textarea></label>
+          <button class="btn" onclick="createTopic()">Add to watchlist</button>
+        </div>
+      </details>
+    </section>
+
+    <!-- BRIEFS -->
+    <section class="view" id="view-briefs">
+      <h2 class="sec">Compiled briefs</h2>
+      <button class="btn btn-ghost" id="briefBtn" onclick="makeBrief()" style="margin-bottom:14px">
+        ⚒ Compile brief from last 2 days</button>
+      <div id="briefResult"></div>
+      <div id="briefList" style="margin-top:16px"></div>
+    </section>
+  </main>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── Auth + API ───────────────────────────────────────────────────────────
+let backendUrl = localStorage.getItem("forge_backend_url") || "";
+let forgeToken = localStorage.getItem("forge_token") || "";
+let depth = "standard";
+let brain = "claude";
+
+async function api(path, opts = {}) {
+  const headers = {...(opts.headers || {})};
+  if (forgeToken) headers["Authorization"] = "Bearer " + forgeToken;
+  if (opts.body) headers["Content-Type"] = "application/json";
+  return fetch(backendUrl + path, {...opts, headers});
+}
+
+function showSetup(err) {
+  document.getElementById("setupOverlay").hidden = false;
+  document.getElementById("app").hidden = true;
+  document.getElementById("setupUrl").value = backendUrl;
+  document.getElementById("setupToken").value = forgeToken;
+  const e = document.getElementById("setupError");
+  if (err) { e.textContent = err; e.hidden = false; } else e.hidden = true;
+}
+
+async function setupConnect() {
+  const url = document.getElementById("setupUrl").value.trim().replace(/\/$/, "");
+  const tok = document.getElementById("setupToken").value.trim();
+  if (!url) return showSetup("Backend URL required");
+  backendUrl = url; forgeToken = tok;
+  const btn = document.getElementById("setupBtn");
+  btn.disabled = true; btn.textContent = "Testing…";
+  try {
+    const r = await api("/api/health");
+    if (r.status === 401) throw new Error("Token rejected");
+    if (!r.ok) throw new Error("Backend returned " + r.status);
+    const h = await r.json();
+    localStorage.setItem("forge_backend_url", backendUrl);
+    localStorage.setItem("forge_token", forgeToken);
+    boot(h);
+  } catch (e) {
+    showSetup(e.message || "Could not reach backend");
+  } finally {
+    btn.disabled = false; btn.textContent = "Connect";
+  }
+}
+
+function logout() {
+  localStorage.removeItem("forge_backend_url");
+  localStorage.removeItem("forge_token");
+  backendUrl = ""; forgeToken = "";
+  showSetup();
+}
+
+// ── Boot ─────────────────────────────────────────────────────────────────
+function boot(health) {
+  document.getElementById("setupOverlay").hidden = true;
+  document.getElementById("app").hidden = false;
+  setHealth(health);
+  loadFeed();
+  loadTopics();
+  pollHealth();
+}
+
+function setHealth(h) {
+  const dot = document.getElementById("health");
+  const ok = h && h.status === "ok";
+  dot.className = "dot " + (ok ? "ok" : "bad");
+  dot.title = ok ? `${h.claude_ready?"Claude":"Gemma"} ready · ${h.signals_new||0} new signals` : "Backend unreachable";
+  // Reflect the backend's default brain + disable Claude if no API key
+  if (h && h.default_brain) { brain = h.default_brain; setBrain(brain); }
+  const cbtn = document.querySelector('#brainSeg button[data-b="claude"]');
+  if (cbtn && h && !h.claude_ready) { cbtn.disabled = true; cbtn.textContent = "☁️ —"; }
+}
+async function pollHealth() {
+  setInterval(async () => {
+    try { const r = await api("/api/health"); if (r.ok) setHealth(await r.json()); }
+    catch (e) { document.getElementById("health").className = "dot bad"; }
+  }, 30000);
+}
+
+function switchTab(v) {
+  document.querySelectorAll(".tab").forEach(t => t.classList.toggle("active", t.dataset.view === v));
+  document.querySelectorAll(".view").forEach(s => s.classList.toggle("active", s.id === "view-" + v));
+  if (v === "feed") loadFeed();
+  if (v === "topics") loadTopics();
+  if (v === "briefs") loadBriefs();
+}
+
+// ── Feed ─────────────────────────────────────────────────────────────────
+let feedFilter = "new";
+const FILTERS = [
+  {k:"new",label:"🆕 New"},{k:"starred",label:"⭐ Starred"},
+  {k:"reviewed",label:"✓ Reviewed"},{k:"all",label:"All"},
+  {k:"crypto",label:"🪙 Crypto"},{k:"ai",label:"🧠 AI"},
+  {k:"business",label:"💡 Business"},{k:"trucking",label:"🚚 Freight"},
+];
+const DOM_NAMES = {crypto:"crypto",ai:"ai",business:"business",trucking:"freight",general:"general"};
+
+function renderFilters() {
+  document.getElementById("feedFilters").innerHTML = FILTERS.map(f =>
+    `<button class="chip ${feedFilter===f.k?'active':''}" onclick="setFilter('${f.k}')">${f.label}</button>`
+  ).join("");
+}
+function setFilter(k){ feedFilter = k; renderFilters(); loadFeed(); }
+
+async function loadFeed() {
+  renderFilters();
+  const list = document.getElementById("feedList");
+  list.innerHTML = `<div class="empty"><div class="spinner" style="margin:0 auto 14px"></div>Loading signals…</div>`;
+  let q = "?limit=100";
+  if (["new","starred","reviewed"].includes(feedFilter)) q += "&status=" + feedFilter;
+  else if (["crypto","ai","business","trucking"].includes(feedFilter)) q += "&domain=" + feedFilter;
+  try {
+    const r = await api("/api/signals" + q);
+    const {signals} = await r.json();
+    if (!signals || !signals.length) {
+      list.innerHTML = `<div class="empty"><div class="big">⚒</div>No signals here yet.<br>
+        <span class="small">Run a topic or forge a research question to compile signals.</span></div>`;
+      return;
+    }
+    list.innerHTML = signals.map(signalCard).join("");
+  } catch (e) {
+    list.innerHTML = `<div class="empty">Couldn't load signals.<br><span class="small">${e.message}</span></div>`;
+  }
+}
+
+function signalCard(s) {
+  const dom = s.domain || "general";
+  const domName = DOM_NAMES[dom] || dom;
+  const cites = (s.citations||[]).map(c =>
+    `<a class="cite" href="${esc(c.url)}" target="_blank" rel="noopener">${esc(c.title||c.url)}</a>`).join("");
+  const tags = (s.tags||[]).map(t => `<span class="tag">${esc(t)}</span>`).join("");
+  const prov = s.model ? `<span class="prov">${s.model.includes("claude")?"☁️ Claude":"🔥 Local"}</span>` : "";
+  return `<div class="card" data-id="${s.id}">
+    <div class="sig-top">
+      <div class="sig-title">${esc(s.title)}</div>
+      <div class="sig-score">${s.score}</div>
+    </div>
+    <div class="badges">
+      <span class="badge dom" style="background:var(--${dom})">${domName}</span>
+      <span class="badge conf" style="color:var(--${s.confidence})">${s.confidence}</span>
+      ${tags}${prov}
+    </div>
+    <p class="sig-sum">${esc(s.summary)}</p>
+    ${s.implication ? `<p class="sig-imp">${esc(s.implication)}</p>` : ""}
+    <div class="cites">${cites}</div>
+    <div class="sig-actions">
+      <button class="act star ${s.status==='starred'?'on':''}" onclick="setStatus(${s.id},'starred')">⭐ Star</button>
+      <button class="act ${s.status==='reviewed'?'on':''}" onclick="setStatus(${s.id},'reviewed')">✓ Reviewed</button>
+      <button class="act" onclick="setStatus(${s.id},'archived')">✕ Dismiss</button>
+    </div>
+  </div>`;
+}
+
+async function setStatus(id, status) {
+  try {
+    await api("/api/signals/" + id, {method:"PUT", body:JSON.stringify({status})});
+    toast(status === "archived" ? "Dismissed" : status === "starred" ? "Starred ⭐" : "Marked reviewed");
+    const card = document.querySelector(`.card[data-id="${id}"]`);
+    if (status === "archived" && card) { card.style.opacity=".3"; setTimeout(()=>card.remove(),250); }
+    else loadFeed();
+  } catch (e) { toast("Failed: " + e.message); }
+}
+
+// ── Research ──────────────────────────────────────────────────────────────
+function setDepth(d){ depth=d; document.querySelectorAll("#depthSeg button").forEach(b=>b.classList.toggle("active",b.dataset.d===d)); }
+function setBrain(b){ brain=b; document.querySelectorAll("#brainSeg button").forEach(x=>x.classList.toggle("active",x.dataset.b===b)); }
+
+async function runResearch() {
+  const query = document.getElementById("qInput").value.trim();
+  if (!query) return toast("Enter a research question");
+  const btn = document.getElementById("forgeBtn");
+  btn.disabled = true; btn.textContent = "🔥 Forging…";
+  document.getElementById("researchResult").innerHTML = "";
+  try {
+    const r = await api("/api/research", {method:"POST", body:JSON.stringify({query, depth, brain})});
+    const {run_id} = await r.json();
+    await pollRun(run_id, "researchResult");
+  } catch (e) { toast("Failed: " + e.message); }
+  finally { btn.disabled = false; btn.textContent = "🔨 Forge Signals"; }
+}
+
+async function pollRun(runId, targetEl) {
+  const prog = document.getElementById("prog");
+  prog.classList.add("show");
+  return new Promise((resolve) => {
+    const iv = setInterval(async () => {
+      try {
+        const r = await api("/api/runs/" + runId);
+        const run = await r.json();
+        document.getElementById("progStage").textContent = stageLabel(run.progress, run.status);
+        document.getElementById("progDetail").textContent = run.progress || "";
+        if (run.status !== "running") {
+          clearInterval(iv); prog.classList.remove("show");
+          if (run.status === "error") {
+            toast("Run failed");
+            document.getElementById(targetEl).innerHTML =
+              `<div class="empty">Run failed.<br><span class="small">${esc(run.error||"")}</span></div>`;
+          } else {
+            renderRunResult(run, targetEl);
+          }
+          resolve(run);
+        }
+      } catch (e) { clearInterval(iv); prog.classList.remove("show"); resolve(null); }
+    }, 1500);
+  });
+}
+
+function stageLabel(p, status) {
+  if (status !== "running") return status === "error" ? "Failed" : "Done";
+  if (!p) return "Working…";
+  if (p.startsWith("search")) return "🔍 Searching the web…";
+  if (p.startsWith("read")) return "📖 Reading sources…";
+  if (p.startsWith("synth")) return "🧠 Gemma synthesizing…";
+  return "Working…";
+}
+
+function renderRunResult(run, targetEl) {
+  const sigs = run.signals || [];
+  const meta = `<div class="small muted" style="margin-bottom:12px">
+    Read ${run.articles_read} of ${run.sources_found} sources · ${run.signals_created} signals · ${run.model||""}
+    ${run.duration_ms?`· ${(run.duration_ms/1000).toFixed(0)}s`:""}</div>`;
+  if (!sigs.length) {
+    document.getElementById(targetEl).innerHTML = meta +
+      `<div class="empty">Nothing material surfaced. Try a sharper query or Deep mode.</div>`;
+    return;
+  }
+  document.getElementById(targetEl).innerHTML = meta + sigs.map(signalCard).join("");
+  toast(`Forged ${sigs.length} signal${sigs.length>1?"s":""} ⚒`);
+}
+
+// ── Topics ──────────────────────────────────────────────────────────────
+async function loadTopics() {
+  const list = document.getElementById("topicList");
+  try {
+    const r = await api("/api/topics");
+    const {topics} = await r.json();
+    if (!topics.length) { list.innerHTML = `<div class="empty small">No topics yet.</div>`; return; }
+    list.innerHTML = topics.map(topicCard).join("");
+  } catch (e) { list.innerHTML = `<div class="empty small">${e.message}</div>`; }
+}
+
+function topicCard(t) {
+  const last = t.last_run_at ? timeAgo(t.last_run_at) : "never run";
+  return `<div class="card" data-tid="${esc(t.id)}">
+    <div class="topic-head">
+      <span class="topic-emoji">${t.emoji||"🔎"}</span>
+      <span class="topic-name">${esc(t.name)}</span>
+      <button class="runbtn" onclick="runTopic('${esc(t.id)}',this)">Run</button>
+    </div>
+    <p class="topic-lens">${esc(t.lens||"")}</p>
+    <div class="topic-meta">
+      <span><span class="badge dom" style="background:var(--${t.domain||'general'});font-size:9.5px">${DOM_NAMES[t.domain]||t.domain}</span>
+        &nbsp;${(t.queries||[]).length} queries · ${t.cadence}</span>
+      <span>last: ${last}</span>
+    </div>
+  </div>`;
+}
+
+async function runTopic(id, btn) {
+  btn.disabled = true; btn.textContent = "…";
+  try {
+    const r = await api("/api/topics/" + id + "/run", {method:"POST"});
+    const {run_id} = await r.json();
+    switchTab("research");
+    document.getElementById("researchResult").innerHTML =
+      `<div class="small muted" style="margin-bottom:10px">Running watchlist topic…</div>`;
+    await pollRun(run_id, "researchResult");
+    loadTopics();
+  } catch (e) { toast("Failed: " + e.message); }
+  finally { btn.disabled = false; btn.textContent = "Run"; }
+}
+
+async function createTopic() {
+  const name = document.getElementById("ntName").value.trim();
+  if (!name) return toast("Name required");
+  const queries = document.getElementById("ntQueries").value.split("\n").map(s=>s.trim()).filter(Boolean);
+  const body = {name, domain:document.getElementById("ntDomain").value,
+    queries, lens:document.getElementById("ntLens").value.trim(), cadence:"manual"};
+  try {
+    await api("/api/topics", {method:"POST", body:JSON.stringify(body)});
+    toast("Topic added ⚒");
+    ["ntName","ntQueries","ntLens"].forEach(i=>document.getElementById(i).value="");
+    loadTopics();
+  } catch (e) { toast("Failed: " + e.message); }
+}
+
+// ── Briefs ──────────────────────────────────────────────────────────────
+async function makeBrief() {
+  const btn = document.getElementById("briefBtn");
+  btn.disabled = true; btn.textContent = "⚒ Compiling…";
+  try {
+    const r = await api("/api/brief", {method:"POST", body:JSON.stringify({days:2})});
+    const b = await r.json();
+    document.getElementById("briefResult").innerHTML =
+      `<div class="brief-md">${mdToHtml(b.brief_md)}</div>`;
+    toast(`Brief over ${b.signal_count} signals`);
+    loadBriefs();
+  } catch (e) { toast("Failed: " + e.message); }
+  finally { btn.disabled = false; btn.textContent = "⚒ Compile brief from last 2 days"; }
+}
+
+async function loadBriefs() {
+  const list = document.getElementById("briefList");
+  try {
+    const r = await api("/api/briefs");
+    const {briefs} = await r.json();
+    if (!briefs.length) { list.innerHTML = `<div class="empty small">No briefs compiled yet.</div>`; return; }
+    list.innerHTML = `<h2 class="sec">History</h2>` + briefs.map(b =>
+      `<div class="card" style="padding:12px 15px;cursor:pointer" onclick="openBrief(${b.id})">
+        <div style="font-weight:600">${esc(b.label)}</div>
+        <div class="small muted">${timeAgo(b.created_at)}</div></div>`).join("");
+  } catch (e) { list.innerHTML = `<div class="empty small">${e.message}</div>`; }
+}
+async function openBrief(id) {
+  try {
+    const r = await api("/api/briefs/" + id);
+    const b = await r.json();
+    document.getElementById("briefResult").innerHTML = `<div class="brief-md">${mdToHtml(b.brief_md)}</div>`;
+    window.scrollTo({top:0,behavior:"smooth"});
+  } catch (e) { toast(e.message); }
+}
+
+// ── Utils ──────────────────────────────────────────────────────────────
+function esc(s){ return (s==null?"":String(s)).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function toast(msg){ const t=document.getElementById("toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(t._h); t._h=setTimeout(()=>t.classList.remove("show"),2200); }
+function timeAgo(ts){ if(!ts)return""; const d=new Date(ts.replace(" ","T")+(ts.includes("Z")?"":"Z")); const s=(Date.now()-d.getTime())/1000; if(s<60)return"just now"; if(s<3600)return Math.floor(s/60)+"m ago"; if(s<86400)return Math.floor(s/3600)+"h ago"; return Math.floor(s/86400)+"d ago"; }
+function mdToHtml(md){
+  if(!md)return"";
+  let h=esc(md);
+  h=h.replace(/^### (.*)$/gm,"<h2>$1</h2>").replace(/^## (.*)$/gm,"<h2>$1</h2>").replace(/^# (.*)$/gm,"<h1>$1</h1>");
+  h=h.replace(/\*\*(.+?)\*\*/g,"<strong>$1</strong>");
+  h=h.replace(/^[-*] (.*)$/gm,"<li>$1</li>").replace(/(<li>.*<\/li>\n?)+/gs,m=>"<ul>"+m+"</ul>");
+  h=h.split(/\n{2,}/).map(b=>/^<(h|ul|li)/.test(b.trim())?b:"<p>"+b.replace(/\n/g,"<br>")+"</p>").join("");
+  return h;
+}
+
+// ── SW + start ──────────────────────────────────────────────────────────
+if ("serviceWorker" in navigator) {
+  fetch("./sw.js?_=" + Date.now(), {cache:"no-store"})
+    .then(r=>r.text()).then(t=>{
+      const m=t.match(/CACHE_NAME\s*=\s*["']([^"']+)["']/);
+      const ver=m?encodeURIComponent(m[1]):Date.now();
+      navigator.serviceWorker.register("./sw.js?"+ver).catch(e=>console.warn(e));
+    }).catch(()=>navigator.serviceWorker.register("./sw.js").catch(e=>console.warn(e)));
+}
+
+(async function init(){
+  if (backendUrl) {
+    try {
+      const r = await api("/api/health");
+      if (r.ok) { boot(await r.json()); return; }
+    } catch (e) {}
+  }
+  showSetup();
+})();
+</script>
+</body>
+</html>
