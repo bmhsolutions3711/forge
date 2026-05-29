@@ -612,7 +612,24 @@ if ("serviceWorker" in navigator) {
     }).catch(()=>navigator.serviceWorker.register("./sw.js").catch(e=>console.warn(e)));
 }
 
+// Scan-to-connect deep link. Credentials ride in the URL *fragment* (#…), which
+// browsers never send to the server — so the token never reaches GitHub Pages.
+// We read it, persist it, then strip the hash so it doesn't linger in history.
+function consumeDeepLink(){
+  if (!location.hash || location.hash.length < 2) return false;
+  const p = new URLSearchParams(location.hash.slice(1));
+  const u = p.get("url");
+  if (!u) return false;
+  backendUrl = u.replace(/\/$/, "");
+  forgeToken = p.get("token") || "";
+  localStorage.setItem("forge_backend_url", backendUrl);
+  localStorage.setItem("forge_token", forgeToken);
+  history.replaceState(null, "", location.pathname + location.search);
+  return true;
+}
+
 (async function init(){
+  consumeDeepLink();
   if (backendUrl) {
     try {
       const r = await api("/api/health");
