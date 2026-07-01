@@ -516,12 +516,19 @@ function stageLabel(p, status) {
 
 function renderRunResult(run, targetEl) {
   const sigs = run.signals || [];
+  const created = run.signals_created ?? sigs.length;
+  const skipped = run.signals_skipped || 0;               // dedup'd repeats — "already known"
+  const knownBit = skipped > 0 ? ` · ${skipped} already known` : "";
   const meta = `<div class="small muted" style="margin-bottom:12px">
-    Read ${run.articles_read} of ${run.sources_found} sources · ${run.signals_created} signals · ${run.model||""}
+    Read ${run.articles_read} of ${run.sources_found} sources · ${created} new${knownBit} · ${run.model||""}
     ${run.duration_ms?`· ${(run.duration_ms/1000).toFixed(0)}s`:""}</div>`;
   if (!sigs.length) {
+    // 0 new + something skipped = healthy (everything was already surfaced), NOT a failure.
+    const emptyMsg = skipped > 0
+      ? `Nothing <em>new</em> — all ${skipped} finding${skipped>1?"s":""} were already surfaced. Working as intended.`
+      : `Nothing material surfaced. Try a sharper query or Deep mode.`;
     document.getElementById(targetEl).innerHTML = meta +
-      `<div class="empty">Nothing material surfaced. Try a sharper query or Deep mode.</div>`;
+      `<div class="empty">${emptyMsg}</div>`;
     return;
   }
   document.getElementById(targetEl).innerHTML = meta + sigs.map(signalCard).join("");
