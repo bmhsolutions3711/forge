@@ -1,5 +1,5 @@
 // Forge PWA shell — network-first SW. Backend API calls (cross-origin) bypass cache.
-const CACHE_NAME = "forge-shell-v4"; // v4: Forge Radio — signal TTS player
+const CACHE_NAME = "forge-shell-v5"; // v5: full listen-through auto-marks reviewed
 const SHELL = [
   "./",
   "./index.html",

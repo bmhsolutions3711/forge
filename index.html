@@ -520,7 +520,7 @@ const Player = {
   ensure() {
     if (this.audio) return;
     this.audio = new Audio();
-    this.audio.onended = () => this.next(true);
+    this.audio.onended = () => { this.markHeard(); this.next(true); };
     this.audio.onplay = () => this.syncUI();
     this.audio.onpause = () => this.syncUI();
     if ("mediaSession" in navigator) {
@@ -579,6 +579,18 @@ const Player = {
     if (b && this.audio) b.textContent = this.audio.paused ? "▶ Play" : "⏸ Pause";
     const s = this.cur(), st = document.getElementById("pStar");
     if (st && s) st.textContent = s.status === "starred" ? "⭐ Starred" : "⭐ Star";
+  },
+
+  // A full listen-through with no action = the road version of "✓ Reviewed": heard
+  // it, chose not to star. Skips (partial listens) leave it 'new' for another pass.
+  // Deliberately quiet — no toast, no feed reload; the queue advancing IS the
+  // feedback. Not routed through setStatus() for exactly that reason.
+  markHeard() {
+    const s = this.cur();
+    if (!s || s.status !== "new") return;
+    s.status = "reviewed";
+    api("/api/signals/" + s.id, {method:"PUT", body:JSON.stringify({status:"reviewed"})})
+      .catch(() => { s.status = "new"; });   // dead-zone offline: stays 'new', retries next queue
   },
 
   toggle() { if (!this.audio) return; this.audio.paused ? this.audio.play() : this.audio.pause(); },
