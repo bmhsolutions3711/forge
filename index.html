@@ -95,6 +95,30 @@
     padding:8px;border-radius:9px;font-size:13px;font-weight:600}
   .act.on{color:var(--glow2);border-color:var(--glowdim)}
   .act.star.on{color:#ffd23f;border-color:#5a4a12}
+  .pbtn{background:var(--card2);border:1px solid var(--border);color:var(--glow2);
+    width:34px;height:34px;border-radius:50%;font-size:12px;flex:none;padding:0 0 0 2px}
+  .pbtn.loading{animation:pulse 1s ease-in-out infinite}
+  @keyframes pulse{50%{opacity:.35}}
+
+  /* ── Forge Radio player ── */
+  .player{position:fixed;left:0;right:0;bottom:0;z-index:90;background:var(--bg2);
+    border-top:1px solid var(--glowdim);box-shadow:0 -8px 30px rgba(0,0,0,.5);
+    padding:10px 14px calc(10px + env(safe-area-inset-bottom))}
+  .player .inner{max-width:760px;margin:0 auto}
+  .p-row1{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+  .p-now{flex:1;min-width:0}
+  .p-title{font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .p-sub{font-size:11px;color:var(--muted)}
+  .p-x{background:none;border:none;color:var(--muted);font-size:16px;padding:4px 8px}
+  .p-row2{display:flex;gap:7px}
+  .p-act{flex:1;background:var(--card);border:1px solid var(--border);color:var(--text);
+    padding:12px 4px;border-radius:10px;font-size:13.5px;font-weight:700;min-height:46px;
+    white-space:nowrap}
+  .p-act.main{background:linear-gradient(135deg,var(--glow),var(--glow2));color:#1a1206;border:none}
+  .p-act.star{color:#ffd23f}
+  body.player-open main{padding-bottom:150px}
+  body.player-open .toast{bottom:160px}
+  .briefme{margin-bottom:13px}
 
   .row{display:flex;gap:8px;align-items:center}
   .seg{display:flex;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:3px;gap:2px}
@@ -229,6 +253,7 @@
   <main>
     <!-- FEED -->
     <section class="view active" id="view-feed">
+      <button class="btn briefme" id="briefMeBtn" onclick="Player.briefMe()">📻 Brief me — play what's new</button>
       <div class="filterbar" id="feedFilters"></div>
       <div id="feedList"></div>
     </section>
@@ -294,6 +319,25 @@
       <div id="briefList" style="margin-top:16px"></div>
     </section>
   </main>
+</div>
+
+<!-- ── Forge Radio player ── -->
+<div class="player" id="player" hidden>
+  <div class="inner">
+    <div class="p-row1">
+      <div class="p-now">
+        <div class="p-title" id="pTitle">—</div>
+        <div class="p-sub" id="pSub"></div>
+      </div>
+      <button class="p-x" onclick="Player.close()" title="Close">✕</button>
+    </div>
+    <div class="p-row2">
+      <button class="p-act main" id="pToggle" onclick="Player.toggle()">⏸ Pause</button>
+      <button class="p-act" onclick="Player.next()">⏭ Skip</button>
+      <button class="p-act star" id="pStar" onclick="Player.star()">⭐ Star</button>
+      <button class="p-act" onclick="Player.dismiss()">🗑 Dismiss</button>
+    </div>
+  </div>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -424,6 +468,7 @@ async function loadFeed() {
 }
 
 function signalCard(s) {
+  SIG_CACHE[s.id] = s;   // Forge Radio: playSignal/queue need the full row later
   const dom = s.domain || "general";
   const domName = DOM_NAMES[dom] || dom;
   const cites = (s.citations||[]).map(c =>
@@ -432,6 +477,7 @@ function signalCard(s) {
   const prov = s.model ? `<span class="prov">${s.model.includes("claude")?"☁️ Claude":"🔥 Local"}</span>` : "";
   return `<div class="card" data-id="${s.id}">
     <div class="sig-top">
+      <button class="pbtn" id="pbtn-${s.id}" onclick="playSignal(${s.id})" title="Listen">▶</button>
       <div class="sig-title">${esc(s.title)}</div>
       <div class="sig-score">${s.score}</div>
     </div>
@@ -459,6 +505,134 @@ async function setStatus(id, status) {
     if (status === "archived" && card) { card.style.opacity=".3"; setTimeout(()=>card.remove(),250); }
     else loadFeed();
   } catch (e) { toast("Failed: " + e.message); }
+}
+
+// ── Forge Radio ──────────────────────────────────────────────────────────
+// Signals reviewed at 65 mph: fetch the WAV with the Bearer header (token never
+// rides in a URL), play via a blob URL, queue with auto-advance. MediaSession
+// wires the lock screen + steering-wheel/BT next-track to skip. One reused
+// <audio> element keeps iOS happy with programmatic advance after the first
+// user-gesture play.
+const SIG_CACHE = {};
+const Player = {
+  queue: [], idx: -1, audio: null, blobUrl: null,
+
+  ensure() {
+    if (this.audio) return;
+    this.audio = new Audio();
+    this.audio.onended = () => this.next(true);
+    this.audio.onplay = () => this.syncUI();
+    this.audio.onpause = () => this.syncUI();
+    if ("mediaSession" in navigator) {
+      navigator.mediaSession.setActionHandler("play", () => this.toggle());
+      navigator.mediaSession.setActionHandler("pause", () => this.toggle());
+      navigator.mediaSession.setActionHandler("nexttrack", () => this.next());
+      navigator.mediaSession.setActionHandler("previoustrack", () => this.prev());
+    }
+  },
+
+  cur() { return this.queue[this.idx] || null; },
+
+  async start(list, i = 0) {
+    if (!list.length) return toast("Nothing to play");
+    this.ensure();
+    this.queue = list; this.idx = i;
+    document.getElementById("player").hidden = false;
+    document.body.classList.add("player-open");
+    await this.load();
+  },
+
+  async load() {
+    const s = this.cur();
+    if (!s) return this.close();
+    this.setBar(s, "Generating audio…");
+    try {
+      const r = await api(`/api/signals/${s.id}/audio`);
+      if (!r.ok) throw new Error("audio " + r.status);
+      const blob = await r.blob();
+      if (this.blobUrl) URL.revokeObjectURL(this.blobUrl);
+      this.blobUrl = URL.createObjectURL(blob);
+      this.audio.src = this.blobUrl;
+      await this.audio.play();
+      this.setBar(s);
+      if ("mediaSession" in navigator) {
+        navigator.mediaSession.metadata = new MediaMetadata({
+          title: s.title,
+          artist: `Forge · ${DOM_NAMES[s.domain]||s.domain} · score ${s.score}`,
+        });
+      }
+    } catch (e) {
+      toast("Audio failed — skipping");
+      this.next(true);
+    }
+  },
+
+  setBar(s, sub) {
+    document.getElementById("pTitle").textContent = s ? s.title : "—";
+    document.getElementById("pSub").textContent = sub ||
+      `${this.idx + 1} / ${this.queue.length} · ${DOM_NAMES[s.domain]||s.domain} · score ${s.score}`;
+    this.syncUI();
+  },
+
+  syncUI() {
+    const b = document.getElementById("pToggle");
+    if (b && this.audio) b.textContent = this.audio.paused ? "▶ Play" : "⏸ Pause";
+    const s = this.cur(), st = document.getElementById("pStar");
+    if (st && s) st.textContent = s.status === "starred" ? "⭐ Starred" : "⭐ Star";
+  },
+
+  toggle() { if (!this.audio) return; this.audio.paused ? this.audio.play() : this.audio.pause(); },
+
+  next(auto) {
+    if (this.idx + 1 >= this.queue.length) {
+      if (auto) { toast("Queue done 📻"); this.close(); }
+      return;
+    }
+    this.idx++; this.load();
+  },
+  prev() { if (this.idx > 0) { this.idx--; this.load(); } },
+
+  async star() {
+    const s = this.cur(); if (!s) return;
+    s.status = "starred";
+    this.syncUI();
+    await setStatus(s.id, "starred");     // existing path — star → Atlas push unchanged
+  },
+  async dismiss() {
+    const s = this.cur(); if (!s) return;
+    const last = this.idx + 1 >= this.queue.length;
+    await setStatus(s.id, "archived");
+    if (last) this.close(); else this.next();
+  },
+
+  close() {
+    if (this.audio) { this.audio.pause(); this.audio.removeAttribute("src"); }
+    if (this.blobUrl) { URL.revokeObjectURL(this.blobUrl); this.blobUrl = null; }
+    this.queue = []; this.idx = -1;
+    document.getElementById("player").hidden = true;
+    document.body.classList.remove("player-open");
+  },
+
+  async briefMe() {
+    const btn = document.getElementById("briefMeBtn");
+    btn.disabled = true;
+    try {
+      const r = await api("/api/signals?status=new&limit=100");
+      const {signals} = await r.json();
+      if (!signals || !signals.length) return toast("No new signals — queue is clear ✓");
+      signals.sort((a, b) => b.score - a.score);   // most important first
+      toast(`📻 ${signals.length} signal${signals.length>1?"s":""} queued`);
+      await this.start(signals);
+    } catch (e) { toast("Failed: " + e.message); }
+    finally { btn.disabled = false; }
+  },
+};
+
+async function playSignal(id) {
+  const btn = document.getElementById("pbtn-" + id);
+  if (btn) btn.classList.add("loading");
+  try { if (SIG_CACHE[id]) await Player.start([SIG_CACHE[id]]); }
+  finally { if (btn) btn.classList.remove("loading"); }
 }
 
 // ── Research ──────────────────────────────────────────────────────────────
