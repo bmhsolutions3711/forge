@@ -497,10 +497,12 @@ function signalCard(s) {
   </div>`;
 }
 
-async function setStatus(id, status) {
+async function setStatus(id, status, title) {
   try {
     await api("/api/signals/" + id, {method:"PUT", body:JSON.stringify({status})});
-    toast(status === "archived" ? "Dismissed" : status === "starred" ? "Starred ⭐" : "Marked reviewed");
+    // Radio taps confirm WHAT was captured — eyes-free, the title is the receipt.
+    const t = title ? ": " + title.slice(0, 40) : "";
+    toast(status === "archived" ? (t ? "🗑 Dismissed" + t : "Dismissed") : status === "starred" ? (t ? "⭐ Starred" + t : "Starred ⭐") : "Marked reviewed");
     const card = document.querySelector(`.card[data-id="${id}"]`);
     if (status === "archived" && card) { card.style.opacity=".3"; setTimeout(()=>card.remove(),250); }
     else loadFeed();
@@ -595,29 +597,49 @@ const Player = {
 
   toggle() { if (!this.audio) return; this.audio.paused ? this.audio.play() : this.audio.pause(); },
 
+  // Reaction-lag budget (Sage's 30s-lookback lesson, radio-sized): after an AUTO
+  // advance the decision about a signal arrives AFTER its narration does, so a
+  // star/dismiss tap within 8s still means the signal that just ended — not the
+  // one whose boilerplate lead-in is playing. Manual skips clear it (skipping is
+  // deliberate; the tap means what's playing). Idempotent inside the window so a
+  // nervous double-tap can't spill onto the next signal.
+  graceSig: null, graceAt: 0,
+  graceTarget() { return this.graceSig && Date.now() - this.graceAt < 8000 ? this.graceSig : null; },
+
   next(auto) {
     if (this.idx + 1 >= this.queue.length) {
-      if (auto) { toast("Queue done 📻"); this.close(); }
+      // Queue done: hold the bar open on the last signal — closing here swallowed
+      // the end-of-queue star (the most considered tap of the drive). ✕ closes.
+      if (auto) this.setBar(this.cur(), "Queue done 📻 — ⭐ still works");
       return;
     }
+    if (auto) { this.graceSig = this.cur(); this.graceAt = Date.now(); }
+    else this.graceSig = null;
     this.idx++; this.load();
   },
-  prev() { if (this.idx > 0) { this.idx--; this.load(); } },
+  prev() { if (this.idx > 0) { this.graceSig = null; this.idx--; this.load(); } },
 
   async star() {
-    const s = this.cur(); if (!s) return;
+    const s = this.graceTarget() || this.cur(); if (!s) return;
+    if (s.status === "starred") return toast("⭐ Already starred: " + s.title.slice(0, 40));
     s.status = "starred";
     this.syncUI();
-    await setStatus(s.id, "starred");     // existing path — star → Atlas push unchanged
+    await setStatus(s.id, "starred", s.title);  // existing path — star → Atlas push unchanged
   },
   async dismiss() {
+    const g = this.graceTarget();
+    if (g) {  // late tap = the signal that just ended; current keeps playing
+      if (g.status !== "archived") { g.status = "archived"; await setStatus(g.id, "archived", g.title); }
+      return;
+    }
     const s = this.cur(); if (!s) return;
     const last = this.idx + 1 >= this.queue.length;
-    await setStatus(s.id, "archived");
+    await setStatus(s.id, "archived", s.title);
     if (last) this.close(); else this.next();
   },
 
   close() {
+    this.graceSig = null;
     if (this.audio) { this.audio.pause(); this.audio.removeAttribute("src"); }
     if (this.blobUrl) { URL.revokeObjectURL(this.blobUrl); this.blobUrl = null; }
     this.queue = []; this.idx = -1;
