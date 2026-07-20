@@ -1,5 +1,5 @@
 // Forge PWA shell — network-first SW. Backend API calls (cross-origin) bypass cache.
-const CACHE_NAME = "forge-shell-v6"; // v6: star/dismiss grace window + queue-done hold-open + named toasts
+const CACHE_NAME = "forge-shell-v7"; // v7: read-along (narration + sentence/word highlight); v6: star grace window + queue-done hold-open + named toasts
 const SHELL = [
   "./",
   "./index.html",

@@ -118,6 +118,20 @@
   .p-act.star{color:#ffd23f}
   body.player-open main{padding-bottom:150px}
   body.player-open .toast{bottom:160px}
+  /* ── Read-along: the prose being spoken; the live sentence glows, spoken words ignite ── */
+  .p-reader{display:none;max-height:38vh;overflow-y:auto;margin:0 0 10px;padding:13px 15px;
+    background:var(--card);border:1px solid var(--border);border-radius:var(--radius);
+    font-size:16.5px;line-height:1.8;overscroll-behavior:contain;scroll-behavior:smooth}
+  body.reader-open .p-reader{display:block}
+  .p-reader .sen{color:var(--dim);transition:color .4s}
+  .p-reader .sen.past{color:var(--muted)}
+  .p-reader .sen.live{color:var(--text)}
+  .p-reader .sen .w{transition:color .25s}
+  .p-reader .sen.live .w.sung{color:var(--glow2);text-shadow:0 0 14px rgba(255,179,71,.25)}
+  .p-chevron{background:none;border:none;color:var(--muted);font-size:13px;padding:4px 9px}
+  body.reader-open .p-chevron{color:var(--glow2)}
+  body.player-open.reader-open main{padding-bottom:calc(38vh + 175px)}
+  body.player-open.reader-open .toast{bottom:calc(38vh + 180px)}
   .briefme{margin-bottom:13px}
 
   .row{display:flex;gap:8px;align-items:center}
@@ -324,11 +338,13 @@
 <!-- ── Forge Radio player ── -->
 <div class="player" id="player" hidden>
   <div class="inner">
+    <div class="p-reader" id="pReader"></div>
     <div class="p-row1">
-      <div class="p-now">
+      <div class="p-now" onclick="Player.toggleReader()">
         <div class="p-title" id="pTitle">—</div>
         <div class="p-sub" id="pSub"></div>
       </div>
+      <button class="p-chevron" id="pChevron" onclick="Player.toggleReader()" title="Read along">▸</button>
       <button class="p-x" onclick="Player.close()" title="Close">✕</button>
     </div>
     <div class="p-row2">
@@ -525,6 +541,7 @@ const Player = {
     this.audio.onended = () => { this.markHeard(); this.next(true); };
     this.audio.onplay = () => this.syncUI();
     this.audio.onpause = () => this.syncUI();
+    this.audio.ontimeupdate = () => this.syncReader();
     if ("mediaSession" in navigator) {
       navigator.mediaSession.setActionHandler("play", () => this.toggle());
       navigator.mediaSession.setActionHandler("pause", () => this.toggle());
@@ -541,6 +558,8 @@ const Player = {
     this.queue = list; this.idx = i;
     document.getElementById("player").hidden = false;
     document.body.classList.add("player-open");
+    document.body.classList.toggle("reader-open", localStorage.getItem("forge_reader") !== "0");
+    this.syncChevron();
     await this.load();
   },
 
@@ -548,10 +567,19 @@ const Player = {
     const s = this.cur();
     if (!s) return this.close();
     this.setBar(s, "Generating audio…");
+    this.renderReader(undefined);
     try {
-      const r = await api(`/api/signals/${s.id}/audio`);
+      // Narration rides alongside the audio fetch — read-along is optional, so a
+      // missing/old endpoint degrades to a static post, never a blocked play.
+      const [r, nr] = await Promise.all([
+        api(`/api/signals/${s.id}/audio`),
+        api(`/api/signals/${s.id}/narration`).catch(() => null),
+      ]);
       if (!r.ok) throw new Error("audio " + r.status);
       const blob = await r.blob();
+      let ntext = null;
+      if (nr && nr.ok) { try { ntext = (await nr.json()).text; } catch (e) {} }
+      this.renderReader(ntext || null);
       if (this.blobUrl) URL.revokeObjectURL(this.blobUrl);
       this.blobUrl = URL.createObjectURL(blob);
       this.audio.src = this.blobUrl;
@@ -581,6 +609,86 @@ const Player = {
     if (b && this.audio) b.textContent = this.audio.paused ? "▶ Play" : "⏸ Pause";
     const s = this.cur(), st = document.getElementById("pStar");
     if (st && s) st.textContent = s.status === "starred" ? "⭐ Starred" : "⭐ Star";
+  },
+
+  // ── Read-along ─────────────────────────────────────────────────────────
+  // Kokoro gives no word timestamps, so sentence boundaries are ESTIMATED:
+  // each sentence weighted by its length plus a pause allowance, fractions
+  // anchored to the clip's exact duration. Sentence-level lands within ~½s
+  // and self-corrects at every boundary; the word sweep inside the live
+  // sentence is cosmetic interpolation. Exact offsets = per-sentence synth
+  // (Sage's pattern) — deliberately NOT built until the estimate disappoints.
+  map: null, lastSen: -1, lastWords: -1,
+
+  renderReader(text) {
+    const el = document.getElementById("pReader");
+    this.map = null; this.lastSen = -1; this.lastWords = -1;
+    if (!el) return;
+    if (text === undefined) { el.innerHTML = '<span class="sen">…</span>'; return; }  // between tracks
+    if (!text) {  // narration endpoint unavailable → static post, no karaoke
+      const s = this.cur();
+      el.innerHTML = s ? `<span class="sen live">${esc(s.title)}.</span> <span class="sen past">${esc(s.summary || "")}</span>` : "";
+      return;
+    }
+    const sens = text.split(/(?<=[.!?])\s+/).filter(t => t.trim());
+    el.innerHTML = "";
+    const weights = sens.map(t => t.trim().length + 26);  // +26 ≈ Kokoro's end-of-sentence pause
+    const total = weights.reduce((a, b) => a + b, 0) || 1;
+    let run = 0;
+    this.map = sens.map((t, i) => {
+      const sen = document.createElement("span");
+      sen.className = "sen";
+      const words = t.trim().split(/\s+/).map((word, k, arr) => {
+        const w = document.createElement("span");
+        w.className = "w"; w.textContent = word;
+        sen.appendChild(w);
+        if (k < arr.length - 1) sen.appendChild(document.createTextNode(" "));
+        return w;
+      });
+      el.appendChild(sen); el.appendChild(document.createTextNode(" "));
+      const f0 = run / total; run += weights[i];
+      return {el: sen, words, f0, f1: run / total};
+    });
+    el.scrollTop = 0;
+  },
+
+  syncReader() {
+    if (!this.map || !this.audio) return;
+    const d = this.audio.duration;
+    if (!d || !isFinite(d)) return;
+    const frac = Math.min(this.audio.currentTime / d, 0.9999);
+    let i = this.map.findIndex(s => frac < s.f1);
+    if (i < 0) i = this.map.length - 1;
+    if (i !== this.lastSen) {
+      this.map.forEach((s, j) => {
+        s.el.classList.toggle("live", j === i);
+        s.el.classList.toggle("past", j < i);
+        if (j > i) s.words.forEach(w => w.classList.remove("sung"));
+      });
+      this.lastSen = i; this.lastWords = -1;
+      const p = document.getElementById("pReader"), sen = this.map[i].el;
+      if (p && document.body.classList.contains("reader-open"))
+        p.scrollTop = Math.max(0, sen.offsetTop - p.offsetTop - p.clientHeight / 2 + sen.offsetHeight / 2);
+    }
+    const s = this.map[i];
+    const wf = (frac - s.f0) / (s.f1 - s.f0 || 1);
+    const n = Math.max(0, Math.min(s.words.length, Math.round(wf * s.words.length + 0.35)));
+    if (n !== this.lastWords) {
+      s.words.forEach((w, k) => w.classList.toggle("sung", k < n));
+      this.lastWords = n;
+    }
+  },
+
+  toggleReader() {
+    const open = !document.body.classList.contains("reader-open");
+    document.body.classList.toggle("reader-open", open);
+    localStorage.setItem("forge_reader", open ? "1" : "0");
+    this.syncChevron();
+    if (open) { this.lastSen = -1; this.lastWords = -1; this.syncReader(); }  // re-center on reopen
+  },
+  syncChevron() {
+    const c = document.getElementById("pChevron");
+    if (c) c.textContent = document.body.classList.contains("reader-open") ? "▾" : "▸";
   },
 
   // A full listen-through with no action = the road version of "✓ Reviewed": heard
